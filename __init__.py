@@ -5,7 +5,7 @@ from modules.core.props import Property, StepProperty
 from modules.core.step import StepBase
 from modules import cbpi
 import time
-from os import system, listdir, remove
+import os
 
 LOG_DIR = "./logs/"
 APP_LOG = "app.log"
@@ -26,7 +26,7 @@ class SimpleManualStep(StepBase):
             self.notifyType = "info"
         self.notify(self.heading, self.message, type=self.notifyType, timeout=None)
         if self.proceed == "Continue":
-            self.next()
+            next(self)
 
 ################################################################################
 @cbpi.step
@@ -43,7 +43,7 @@ class SimpleTargetStep(StepBase):
             self.setAutoMode(True)
         elif self.auto_mode == "Set to OFF":
             self.setAutoMode(False)
-        self.next()
+        next(self)
 
     #-------------------------------------------------------------------------------
     def setAutoMode(self, auto_state):
@@ -97,7 +97,7 @@ class SimpleActorTimer(StepBase):
         # Check if timer finished and go to next step
         if self.is_timer_finished() == True:
             self.notify("{} complete".format(self.name), "Starting the next step", timeout=None)
-            self.next()
+            next(self)
 
     #-------------------------------------------------------------------------------
     def actors_on(self):
@@ -132,7 +132,7 @@ class SimpleChillToTemp(StepBase):
             self.actors_on()
         else:
             cbpi.notify("No kettle defined", "Starting the next step", type="danger", timeout=None)
-            self.next()
+            next(self)
 
     #-------------------------------------------------------------------------------
     def reset(self):
@@ -155,7 +155,7 @@ class SimpleChillToTemp(StepBase):
                 elapsed_text = '{}:{:0>2d}'.format(minutes, seconds)
 
             self.notify("{} complete".format(self.name), "Chill temp reached in {}".format(elapsed_text), timeout=None)
-            self.next()
+            next(self)
 
     #-------------------------------------------------------------------------------
     def actors_on(self):
@@ -172,29 +172,56 @@ class SimpleChillToTemp(StepBase):
 @cbpi.step
 class SimpleClearLogsStep(StepBase):
     #-------------------------------------------------------------------------------
+    delete_finished = False
+
     def init(self):
-        log_names = listdir(LOG_DIR)
+        log_names = os.listdir(LOG_DIR)
         for log_name in log_names:
             if (log_name[-4:] == ".log") and (log_name != APP_LOG) and (LOG_SEP not in log_name):
-                remove(LOG_DIR+log_name)
+                if os.path.isfile(LOG_DIR+log_name):
+                    os.remove(LOG_DIR+log_name)
+        self.delete_finished = True
 
-        self.next()
+    def start(self):
+        pass
+
+    def reset(self):
+        pass
+
+    def finish(self):
+        pass
+
+    def execute(self):
+        pass
+
+        # Check if timer finished and go to next step
+        if self.delete_finished == True:
+            self.notify("Logfiles Deleted!" , "Starting the next step")
+            next(self)
 
 ################################################################################
 @cbpi.step
 class SimpleSaveLogsStep(StepBase):
 
     #-------------------------------------------------------------------------------
-    def init(self):
+    def execute(self):
         brew_name  = cbpi.get_config_parameter("brew_name", "")
         if brew_name:
             brew_name = "_".join(brew_name.split())
+            brew_name = brew_name + time.strftime("_%Y_%m_%d")
         else:
             brew_name = time.strftime("Brew_%Y_%m_%d")
-
-        log_names = listdir(LOG_DIR)
+        brew_name = brew_name.replace('%','')
+        brew_name = brew_name.replace("#","")
+        brew_name = brew_name.replace("'","")
+        brew_name = brew_name.replace("$","")
+        brew_name = brew_name.replace("´","")
+        
+        log_names = os.listdir(LOG_DIR)
         for log_name in log_names:
             if (log_name[-4:] == ".log") and (log_name != APP_LOG) and (LOG_SEP not in log_name):
-                system("cat {} > {}".format(LOG_DIR+log_name, LOG_DIR+brew_name+LOG_SEP+log_name))
+                if os.path.isfile(LOG_DIR+log_name):
+                    os.system("cp {} {}".format(LOG_DIR+log_name, LOG_DIR+brew_name+LOG_SEP+log_name))
 
-        self.next()
+        self.notify("Logfiles Saved!" , "Name: %s Starting the next step" % brew_name)
+        next(self)
